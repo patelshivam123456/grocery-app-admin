@@ -3,7 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FreshDrop Ecommerce Admin',
+  title: 'Just Harvst Ecommerce Admin',
   description: 'Production-ready frontend ecommerce admin panel with mock data CRUD.',
 };
 

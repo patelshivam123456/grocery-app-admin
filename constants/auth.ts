@@ -26,13 +26,13 @@ export type PageAccessKey =
   | 'settings';
 
 export const dummyUsers: DummyUser[] = [
-  { name: 'Aarav Super Admin', email: 'admin@freshdrop.test', password: 'Admin@123', role: 'Super Admin' },
-  { name: 'Meera Operations', email: 'ops@freshdrop.test', password: 'Ops@123', role: 'Operations Manager' },
-  { name: 'Karan Inventory', email: 'inventory@freshdrop.test', password: 'Inventory@123', role: 'Inventory Manager' },
-  { name: 'Priya Support', email: 'support@freshdrop.test', password: 'Support@123', role: 'Support Agent' },
+  { name: 'Aarav Super Admin', email: 'admin@justharvst.test', password: 'Admin@123', role: 'Super Admin' },
+  { name: 'Meera Operations', email: 'ops@justharvst.test', password: 'Ops@123', role: 'Operations Manager' },
+  { name: 'Karan Inventory', email: 'inventory@justharvst.test', password: 'Inventory@123', role: 'Inventory Manager' },
+  { name: 'Priya Support', email: 'support@justharvst.test', password: 'Support@123', role: 'Support Agent' },
 ];
 
-export const authStorageKey = 'freshdrop-admin-session';
+export const authStorageKey = 'justharvst-admin-session';
 
 export const roleAccess: Record<UserRole, PageAccessKey[]> = {
   'Super Admin': [

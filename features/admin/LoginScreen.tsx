@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Eye, EyeOff, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
+import { BrandName } from '@/components/common/BrandName';
 import { authenticate, dummyUsers, type DummyUser } from '@/constants/auth';
 
 export function LoginScreen({ onLogin }: { onLogin: (user: DummyUser) => void }) {
@@ -37,7 +38,7 @@ export function LoginScreen({ onLogin }: { onLogin: (user: DummyUser) => void })
             <ShieldCheck className="h-6 w-6" />
           </div>
           <div>
-            <p className="text-sm font-bold">FreshDrop</p>
+            <p className="text-sm"><BrandName /></p>
             <p className="text-xs text-muted-foreground">Ecommerce Admin Panel</p>
           </div>
         </div>
@@ -58,7 +59,7 @@ export function LoginScreen({ onLogin }: { onLogin: (user: DummyUser) => void })
             <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-md bg-primary text-primary-foreground">
               <ShieldCheck className="h-6 w-6" />
             </div>
-            <h1 className="text-2xl font-bold">FreshDrop Admin</h1>
+            <h1 className="text-2xl font-bold"><BrandName /> Admin</h1>
           </div>
           <Card>
             <CardContent>

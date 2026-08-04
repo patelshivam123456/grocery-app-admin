@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
@@ -9,11 +10,27 @@ export type ConfirmationState = {
   message: string;
   confirmLabel: string;
   danger?: boolean;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
 };
 
 export function ConfirmationDialog({ state, onClose }: { state: ConfirmationState; onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!state.open) return null;
+
+  const confirm = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await state.onConfirm();
+      onClose();
+    } catch (confirmError) {
+      setError(confirmError instanceof Error ? confirmError.message : 'Action failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
       <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-panel">
@@ -24,11 +41,12 @@ export function ConfirmationDialog({ state, onClose }: { state: ConfirmationStat
           <div>
             <h2 className="text-lg font-semibold">{state.title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{state.message}</p>
+            {error ? <p className="mt-2 text-sm font-medium text-destructive">{error}</p> : null}
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button variant={state.danger ? 'danger' : 'primary'} onClick={() => { state.onConfirm(); onClose(); }}>
+          <Button variant="outline" disabled={loading} onClick={onClose}>Cancel</Button>
+          <Button variant={state.danger ? 'danger' : 'primary'} loading={loading} onClick={() => void confirm()}>
             {state.confirmLabel}
           </Button>
         </div>

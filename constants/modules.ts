@@ -11,6 +11,10 @@ const field = (name: string, label: string, type: FieldConfig['type'] = 'text', 
   name, label, type, section, options, required,
 });
 
+const disabledField = (name: string, label: string, type: FieldConfig['type'] = 'text', section = 'Details', options?: string[]): FieldConfig => ({
+  name, label, type, section, options, disabled: true,
+});
+
 const seo = [
   field('seoTitle', 'SEO Title', 'text', 'SEO'),
   field('seoDescription', 'SEO Description', 'textarea', 'SEO'),
@@ -36,22 +40,34 @@ export const modules: ModuleConfig[] = [
   {
     key: 'categories', label: 'Categories', singular: 'Category', path: 'categories', icon: Tags,
     description: 'Organize catalog navigation, category imagery, and SEO metadata.',
-    statuses: status, filters: ['parentCategory', 'featuredCategory', 'status'], imageField: 'thumbnail',
-    table: ['categoryName', 'parentCategory', 'sortOrder', 'featuredCategory', 'showOnHome', 'status'],
+    statuses: ['Active', 'Inactive'], filters: ['status'], imageField: 'categoryIconUrl',
+    table: ['categoryIconUrl', 'categoryName', 'categoryDescription', 'tags', 'status'],
     fields: [
-      field('categoryName', 'Category Name', 'text', 'Basic', undefined, true), field('slug', 'Slug', 'text', 'Basic', undefined, true),
-      field('parentCategory', 'Parent Category', 'select', 'Basic', ['None', 'Vegetables', 'Fruits', 'Dairy', 'Bakery']),
-      field('icon', 'Icon', 'image', 'Media'), field('thumbnail', 'Thumbnail', 'image', 'Media'), field('bannerImage', 'Banner Image', 'image', 'Media'),
-      field('description', 'Description', 'textarea', 'Content'), field('sortOrder', 'Sort Order', 'number', 'Visibility'),
-      field('featuredCategory', 'Featured Category', 'select', 'Visibility', yesNo), field('showOnHome', 'Show on Home', 'select', 'Visibility', yesNo),
-      field('showInMenu', 'Show in Menu', 'select', 'Visibility', yesNo), field('status', 'Status', 'select', 'Visibility', status), ...seo,
+      field('categoryName', 'Category Name', 'text', 'Basic', undefined, true),
+      field('categoryDescription', 'Description', 'textarea', 'Basic', undefined, true),
+      field('status', 'Status', 'radio', 'Basic', ['Active', 'Inactive'], true),
+      field('tags', 'Tags', 'multiselect', 'Basic', ['fresh', 'new', 'restock', 'live'], true),
+      field('categoryIconUrl', 'Category Icon', 'image', 'Media', undefined, true),
+      disabledField('slug', 'Slug', 'text', 'Disabled Fields'),
+      disabledField('parentCategory', 'Parent Category', 'select', 'Disabled Fields', ['None', 'Vegetables', 'Fruits', 'Dairy', 'Bakery']),
+      disabledField('icon', 'Icon', 'image', 'Disabled Fields'),
+      disabledField('thumbnail', 'Thumbnail', 'image', 'Disabled Fields'),
+      disabledField('bannerImage', 'Banner Image', 'image', 'Disabled Fields'),
+      disabledField('description', 'Description', 'textarea', 'Disabled Fields'),
+      disabledField('sortOrder', 'Sort Order', 'number', 'Disabled Fields'),
+      disabledField('featuredCategory', 'Featured Category', 'select', 'Disabled Fields', yesNo),
+      disabledField('showOnHome', 'Show on Home', 'select', 'Disabled Fields', yesNo),
+      disabledField('showInMenu', 'Show in Menu', 'select', 'Disabled Fields', yesNo),
+      disabledField('seoTitle', 'SEO Title', 'text', 'Disabled Fields'),
+      disabledField('seoDescription', 'SEO Description', 'textarea', 'Disabled Fields'),
+      disabledField('seoKeywords', 'SEO Keywords', 'text', 'Disabled Fields'),
     ],
   },
   {
     key: 'products', label: 'Products', singular: 'Product', path: 'products', icon: Package,
     description: 'Create, duplicate, price, publish, and merchandize catalog products.',
-    statuses: ['Active', 'Draft', 'Out of Stock', 'Archived'], filters: ['category', 'warehouse', 'status', 'featured'], imageField: 'featuredImage',
-    table: ['productName', 'sku', 'category', 'sellingPrice', 'stockQuantity', 'warehouse', 'status'],
+    statuses: ['Active', 'Inactive', 'Draft', 'Archived'], filters: ['brand', 'status', 'hasVariant', 'hasBatch'], imageField: 'featuredImage',
+    table: ['productName', 'brand', 'sku', 'slug', 'categories', 'hasVariant', 'hasBatch', 'status'],
     fields: [
       field('productName', 'Product Name', 'text', 'Basic Information', undefined, true), field('slug', 'Slug', 'text', 'Basic Information', undefined, true),
       field('sku', 'SKU', 'text', 'Basic Information', undefined, true), field('barcode', 'Barcode', 'text', 'Basic Information'),

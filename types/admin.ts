@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 
-export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'date' | 'boolean' | 'image' | 'images' | 'url' | 'email' | 'tel';
+export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'multiselect' | 'radio' | 'date' | 'boolean' | 'image' | 'images' | 'url' | 'email' | 'tel';
 export type AdminValue = string | number | boolean | string[];
 export type AdminRecord = { id: string; createdAt: string; updatedAt: string } & Record<string, AdminValue>;
 
@@ -9,6 +9,7 @@ export type FieldConfig = {
   label: string;
   type: FieldType;
   required?: boolean;
+  disabled?: boolean;
   options?: string[];
   section?: string;
   placeholder?: string;

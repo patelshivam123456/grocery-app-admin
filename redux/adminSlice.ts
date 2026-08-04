@@ -25,6 +25,9 @@ const adminSlice = createSlice({
     setLoading(state, action: PayloadAction<boolean>) {
       state.loading = action.payload;
     },
+    setModuleRecords(state, action: PayloadAction<{ module: ModuleKey; records: AdminRecord[] }>) {
+      state.records[action.payload.module] = action.payload.records;
+    },
     createRecord(state, action: PayloadAction<{ module: ModuleKey; record: AdminRecord }>) {
       state.records[action.payload.module].unshift(action.payload.record);
       state.activities.unshift(`Created ${action.payload.record.id}`);
@@ -34,6 +37,12 @@ const adminSlice = createSlice({
         record.id === action.payload.record.id ? { ...action.payload.record, updatedAt: stamp() } : record
       ));
       state.activities.unshift(`Updated ${action.payload.record.id}`);
+    },
+    upsertRecord(state, action: PayloadAction<{ module: ModuleKey; record: AdminRecord }>) {
+      const exists = state.records[action.payload.module].some((record) => record.id === action.payload.record.id);
+      state.records[action.payload.module] = exists
+        ? state.records[action.payload.module].map((record) => (record.id === action.payload.record.id ? action.payload.record : record))
+        : [action.payload.record, ...state.records[action.payload.module]];
     },
     duplicateRecord(state, action: PayloadAction<{ module: ModuleKey; id: string }>) {
       const original = state.records[action.payload.module].find((record) => record.id === action.payload.id);
@@ -55,5 +64,5 @@ const adminSlice = createSlice({
   },
 });
 
-export const { setLoading, createRecord, updateRecord, duplicateRecord, deleteRecords, changeStatus } = adminSlice.actions;
+export const { setLoading, setModuleRecords, createRecord, updateRecord, upsertRecord, duplicateRecord, deleteRecords, changeStatus } = adminSlice.actions;
 export default adminSlice.reducer;

@@ -5,7 +5,7 @@ import {
   flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel,
   useReactTable, type ColumnDef, type SortingState, type VisibilityState
 } from '@tanstack/react-table';
-import { Archive, ArrowUpDown, Copy, Download, Edit, Eye, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Archive, ArrowUpDown, Boxes, Columns3, Copy, Download, Edit, Eye, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react';
 import type { AdminRecord, ModuleConfig } from '@/types/admin';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -13,6 +13,7 @@ import { StatusChip } from '@/components/common/StatusChip';
 import { Pagination } from '@/components/tables/Pagination';
 import { Filters } from '@/components/tables/Filters';
 import { EmptyState } from '@/components/common/EmptyState';
+import { SkeletonRows } from '@/components/common/Skeleton';
 import { readable } from '@/utils/format';
 
 type Props = {
@@ -25,13 +26,20 @@ type Props = {
   onArchive: (ids: string[]) => void;
   onStatus: (ids: string[], status: string) => void;
   onAdd: () => void;
+  onAddSubCategory?: (record: AdminRecord) => void;
+  onVariants?: (record: AdminRecord) => void;
+  onRetry?: () => void;
+  loading?: boolean;
+  error?: string | null;
 };
 
-export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate, onArchive, onStatus, onAdd }: Props) {
+export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate, onArchive, onStatus, onAdd, onAddSubCategory, onVariants, onRetry, loading, error }: Props) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [columnQuery, setColumnQuery] = useState('');
   const [rowSelection, setRowSelection] = useState({});
 
   const filteredData = useMemo(() => data.filter((record) => {
@@ -58,7 +66,7 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
       cell: ({ row }) => {
         const value = row.original[key];
         if (key.toLowerCase().includes('status') && typeof value === 'string') return <StatusChip status={value} />;
-        if (module.imageField === key && typeof value === 'string') return <img src={value} alt="" className="h-10 w-10 rounded-md object-cover" />;
+        if (module.imageField === key && typeof value === 'string' && value.trim()) return <img src={value} alt="" className="h-10 w-10 rounded-md object-cover" />;
         return <span className="line-clamp-2">{readable(value)}</span>;
       },
     })),
@@ -70,13 +78,15 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
         <div className="flex justify-end gap-1">
           <Button variant="ghost" className="h-8 w-8 p-0" title="View" onClick={() => onView(row.original)}><Eye className="h-4 w-4" /></Button>
           <Button variant="ghost" className="h-8 w-8 p-0" title="Edit" onClick={() => onEdit(row.original)}><Edit className="h-4 w-4" /></Button>
-          {module.key === 'products' ? <Button variant="ghost" className="h-8 w-8 p-0" title="Duplicate" onClick={() => onDuplicate(row.original)}><Copy className="h-4 w-4" /></Button> : null}
+          {module.key === 'categories' && onAddSubCategory ? <Button variant="ghost" className="h-8 w-8 p-0" title="Add Sub Category" onClick={() => onAddSubCategory(row.original)}><Plus className="h-4 w-4" /></Button> : null}
+          {module.key === 'products' && onVariants ? <Button variant="ghost" className="h-8 w-8 p-0" title="Variants" onClick={() => onVariants(row.original)}><Boxes className="h-4 w-4" /></Button> : null}
+          {module.key === 'products' && !onVariants ? <Button variant="ghost" className="h-8 w-8 p-0" title="Duplicate" onClick={() => onDuplicate(row.original)}><Copy className="h-4 w-4" /></Button> : null}
           <Button variant="ghost" className="h-8 w-8 p-0" title="Archive" onClick={() => onArchive([row.original.id])}><Archive className="h-4 w-4" /></Button>
           <Button variant="ghost" className="h-8 w-8 p-0 text-destructive" title="Delete" onClick={() => onDelete([row.original.id])}><Trash2 className="h-4 w-4" /></Button>
         </div>
       ),
     },
-  ], [module, onArchive, onDelete, onDuplicate, onEdit, onView]);
+  ], [module, onAddSubCategory, onArchive, onDelete, onDuplicate, onEdit, onVariants, onView]);
 
   const table = useReactTable({
     data: filteredData,
@@ -92,6 +102,26 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
     initialState: { pagination: { pageSize: 8 } },
   });
   const selectedIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
+  const searchableColumns = module.table.filter((key) => {
+    const label = module.fields.find((field) => field.name === key)?.label ?? key;
+    return label.toLowerCase().includes(columnQuery.toLowerCase()) || key.toLowerCase().includes(columnQuery.toLowerCase());
+  });
+  const visibleModuleColumns = module.table.filter((key) => table.getColumn(key)?.getIsVisible());
+  const allModuleColumnsVisible = visibleModuleColumns.length === module.table.length;
+  const noModuleColumnsVisible = visibleModuleColumns.length === 0;
+
+  const setModuleColumnsVisible = (visible: boolean) => {
+    setColumnVisibility({
+      ...columnVisibility,
+      ...Object.fromEntries(module.table.map((key) => [key, visible])),
+    });
+  };
+
+  const toggleColumn = (key: string) => {
+    const column = table.getColumn(key);
+    if (!column) return;
+    setColumnVisibility({ ...columnVisibility, [key]: !column.getIsVisible() });
+  };
 
   const exportCsv = () => {
     const headers = module.table.join(',');
@@ -106,7 +136,7 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
   };
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-visible">
       <Filters module={module} query={query} setQuery={setQuery} filters={filters} setFilters={setFilters} />
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
         <div className="flex flex-wrap gap-2">
@@ -118,16 +148,51 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
           <Button variant="outline" disabled={!selectedIds.length} onClick={() => onArchive(selectedIds)}><Archive className="h-4 w-4" /> Archive</Button>
         </div>
         <div className="flex gap-2">
-          <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" onChange={(event) => setColumnVisibility({ ...columnVisibility, [event.target.value]: !table.getColumn(event.target.value)?.getIsVisible() })}>
-            <option value="">Columns</option>
-            {module.table.map((key) => <option key={key} value={key}>{key}</option>)}
-          </select>
+          <div className="relative">
+            <Button variant="outline" type="button" onClick={() => setColumnsOpen((current) => !current)}>
+              <Columns3 className="h-4 w-4" /> Columns
+            </Button>
+            {columnsOpen ? (
+              <div className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-border bg-card p-2 shadow-panel">
+                <div className="relative mb-2">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm outline-none ring-ring transition focus:ring-2"
+                    placeholder="Search columns"
+                    value={columnQuery}
+                    onChange={(event) => setColumnQuery(event.target.value)}
+                  />
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted">
+                  <input type="checkbox" checked={allModuleColumnsVisible} onChange={() => setModuleColumnsVisible(!allModuleColumnsVisible)} />
+                  <span>Select All</span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted">
+                  <input type="checkbox" checked={noModuleColumnsVisible} onChange={() => setModuleColumnsVisible(false)} />
+                  <span>Remove All</span>
+                </label>
+                <div className="my-1 border-t border-border" />
+                <div className="max-h-56 overflow-auto">
+                  {searchableColumns.length ? searchableColumns.map((key) => (
+                    <label key={key} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted">
+                      <input type="checkbox" checked={Boolean(table.getColumn(key)?.getIsVisible())} onChange={() => toggleColumn(key)} />
+                      <span>{module.fields.find((field) => field.name === key)?.label ?? key}</span>
+                    </label>
+                  )) : <div className="px-2 py-3 text-sm text-muted-foreground">No columns found</div>}
+                </div>
+              </div>
+            ) : null}
+          </div>
           <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4" /> CSV</Button>
           <Button className="hidden sm:inline-flex" onClick={onAdd}>Add {module.singular}</Button>
           <Button className="h-10 w-10 p-0 sm:hidden" onClick={onAdd}><MoreHorizontal className="h-4 w-4" /></Button>
         </div>
       </div>
-      {filteredData.length ? (
+      {loading ? (
+        <div className="p-4"><SkeletonRows /></div>
+      ) : error ? (
+        <div className="p-4"><EmptyState title={error} actionLabel={onRetry ? 'Retry' : undefined} onAction={onRetry} /></div>
+      ) : filteredData.length ? (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-muted/60 text-left text-xs uppercase text-muted-foreground">

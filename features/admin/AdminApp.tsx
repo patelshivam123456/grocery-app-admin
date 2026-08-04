@@ -8,6 +8,7 @@ import { Dashboard } from '@/features/admin/Dashboard';
 import { AccessDenied } from '@/features/admin/AccessDenied';
 import { LoginScreen } from '@/features/admin/LoginScreen';
 import { ModulePage } from '@/features/admin/ModulePage';
+import { ProductModulePage } from '@/features/products/ProductModulePage';
 import { moduleByPath } from '@/constants/modules';
 import { authStorageKey, canAccess, type DummyUser } from '@/constants/auth';
 
@@ -48,13 +49,23 @@ function AdminRouter() {
   const module = moduleByPath[section];
   const id = parts[1];
   const intent = parts[2];
-  const mode = section === 'dashboard' ? 'dashboard' : parts[1] === 'new' ? 'new' : intent === 'edit' ? 'edit' : intent === 'view' || id ? 'view' : 'list';
+  const mode = section === 'dashboard'
+    ? 'dashboard'
+    : module?.key === 'categories' && intent === 'sub-category'
+      ? 'subCategory'
+      : parts[1] === 'new'
+        ? 'new'
+        : intent === 'edit'
+          ? 'edit'
+          : intent === 'view' || id
+            ? 'view'
+            : 'list';
   const pageKey = module?.path ?? 'dashboard';
   const allowed = canAccess(user.role, pageKey);
 
   return (
     <AppShell user={user} onLogout={logout}>
-      {!allowed ? <AccessDenied user={user} page={pageKey} /> : mode === 'dashboard' || !module ? <Dashboard /> : <ModulePage module={module} id={id} mode={mode} />}
+      {!allowed ? <AccessDenied user={user} page={pageKey} /> : module?.key === 'products' ? <ProductModulePage parts={parts} /> : mode === 'dashboard' || !module ? <Dashboard /> : <ModulePage module={module} id={id} mode={mode} />}
     </AppShell>
   );
 }

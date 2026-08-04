@@ -3,8 +3,9 @@ import type { FieldConfig, ModuleConfig } from '@/types/admin';
 
 const valueSchema = (field: FieldConfig) => {
   if (field.type === 'number') return z.coerce.number().min(0, `${field.label} must be zero or more`);
-  if (field.type === 'images') return z.array(z.string()).default([]);
-  if (field.required) return z.string().min(1, `${field.label} is required`);
+  if (field.type === 'images') return field.required ? z.array(z.string()).min(1, `${field.label} is required`) : z.array(z.string()).default([]);
+  if (field.type === 'multiselect') return field.required ? z.array(z.string()).min(1, `${field.label} is required`) : z.array(z.string()).default([]);
+  if (field.required) return z.preprocess((value) => (typeof value === 'string' ? value.trim() : value), z.string().min(1, `${field.label} is required`));
   return z.union([z.string(), z.boolean(), z.array(z.string())]).optional();
 };
 

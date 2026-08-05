@@ -37,6 +37,7 @@ type ProductListFilter = 'all' | 'active' | 'deleted';
 
 const textInput = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-ring transition focus:ring-2 disabled:cursor-not-allowed disabled:opacity-55';
 const areaInput = `${textInput} min-h-28 py-2`;
+const measuringUnits = ['kg', 'gm', 'litre', 'ml'];
 
 const variantModule: ModuleConfig = {
   key: 'products',
@@ -744,7 +745,7 @@ function VariantFields({ variant, onChange }: { variant: VariantFormState; onCha
         <NumberField label="Low Stock Threshold" value={variant.lowStockThreshold} onChange={(value) => onChange({ lowStockThreshold: value })} />
         <NumberField label="Min Order Quantity" value={variant.minOrderQuantity} onChange={(value) => onChange({ minOrderQuantity: value })} />
         <NumberField label="Max Order Quantity" value={variant.maxOrderQuantity} onChange={(value) => onChange({ maxOrderQuantity: value })} />
-        <TextField label="Measuring Unit" required value={variant.measuringUnit} onChange={(value) => onChange({ measuringUnit: value })} />
+        <SelectField label="Measuring Unit" required value={variant.measuringUnit} options={measuringUnits} onChange={(value) => onChange({ measuringUnit: value })} />
         <NumberField label="Amount" required value={variant.amount} onChange={(value) => onChange({ amount: value })} />
       </div>
       <div className="flex flex-wrap gap-4">
@@ -907,6 +908,18 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
     <label>
       <span className="mb-1.5 block text-sm font-medium">{label}</span>
       <input className={textInput} type="date" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function SelectField({ label, value, options, onChange, required }: { label: string; value: string; options: string[]; onChange: (value: string) => void; required?: boolean }) {
+  return (
+    <label>
+      <span className="mb-1.5 block text-sm font-medium">{label}{required ? ' *' : ''}</span>
+      <select className={textInput} value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Select</option>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
     </label>
   );
 }

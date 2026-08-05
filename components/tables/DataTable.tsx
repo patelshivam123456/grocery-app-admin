@@ -28,12 +28,13 @@ type Props = {
   onAdd: () => void;
   onAddSubCategory?: (record: AdminRecord) => void;
   onVariants?: (record: AdminRecord) => void;
+  onBatches?: (record: AdminRecord) => void;
   onRetry?: () => void;
   loading?: boolean;
   error?: string | null;
 };
 
-export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate, onArchive, onStatus, onAdd, onAddSubCategory, onVariants, onRetry, loading, error }: Props) {
+export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate, onArchive, onStatus, onAdd, onAddSubCategory, onVariants, onBatches, onRetry, loading, error }: Props) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -80,13 +81,14 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
           <Button variant="ghost" className="h-8 w-8 p-0" title="Edit" onClick={() => onEdit(row.original)}><Edit className="h-4 w-4" /></Button>
           {module.key === 'categories' && onAddSubCategory ? <Button variant="ghost" className="h-8 w-8 p-0" title="Add Sub Category" onClick={() => onAddSubCategory(row.original)}><Plus className="h-4 w-4" /></Button> : null}
           {module.key === 'products' && onVariants ? <Button variant="ghost" className="h-8 w-8 p-0" title="Variants" onClick={() => onVariants(row.original)}><Boxes className="h-4 w-4" /></Button> : null}
-          {module.key === 'products' && !onVariants ? <Button variant="ghost" className="h-8 w-8 p-0" title="Duplicate" onClick={() => onDuplicate(row.original)}><Copy className="h-4 w-4" /></Button> : null}
+          {module.key === 'products' && onBatches ? <Button variant="ghost" className="h-8 w-8 p-0" title="Batches" onClick={() => onBatches(row.original)}><Boxes className="h-4 w-4" /></Button> : null}
+          {module.label === 'Products' && !onVariants ? <Button variant="ghost" className="h-8 w-8 p-0" title="Duplicate" onClick={() => onDuplicate(row.original)}><Copy className="h-4 w-4" /></Button> : null}
           <Button variant="ghost" className="h-8 w-8 p-0" title="Archive" onClick={() => onArchive([row.original.id])}><Archive className="h-4 w-4" /></Button>
           <Button variant="ghost" className="h-8 w-8 p-0 text-destructive" title="Delete" onClick={() => onDelete([row.original.id])}><Trash2 className="h-4 w-4" /></Button>
         </div>
       ),
     },
-  ], [module, onAddSubCategory, onArchive, onDelete, onDuplicate, onEdit, onVariants, onView]);
+  ], [module, onAddSubCategory, onArchive, onBatches, onDelete, onDuplicate, onEdit, onVariants, onView]);
 
   const table = useReactTable({
     data: filteredData,

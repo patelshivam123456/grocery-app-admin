@@ -17,7 +17,7 @@ import { productApi, extractVariantPublicIds, type CategoryNode, type ProductBat
 import { moduleByKey } from '@/constants/modules';
 import { readable, slugify } from '@/utils/format';
 
-type ProductRouteMode = 'list' | 'add' | 'edit' | 'view' | 'variants' | 'addVariant' | 'editVariant' | 'viewVariant';
+type ProductRouteMode = 'list' | 'add' | 'edit' | 'view' | 'variants' | 'addVariant' | 'editVariant' | 'viewVariant' | 'batches' | 'addBatch' | 'editBatch' | 'viewBatch';
 
 type ProductFormState = Omit<ProductPayload, 'additionalDetails' | 'categoryPublicIdList' | 'productVariantList'> & {
   additionalDetailsRows: KeyValueRow[];
@@ -33,6 +33,7 @@ type VariantFormState = Omit<ProductVariantPayload, 'batchList'> & {
 
 type BatchFormState = ProductBatchPayload & { open: boolean; temporaryUuid: string };
 type KeyValueRow = { id: string; keyName: string; value: string };
+type ProductListFilter = 'all' | 'active' | 'deleted';
 
 const textInput = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-ring transition focus:ring-2 disabled:cursor-not-allowed disabled:opacity-55';
 const areaInput = `${textInput} min-h-28 py-2`;
@@ -58,6 +59,30 @@ const variantModule: ModuleConfig = {
   filters: ['status'],
 };
 
+const batchModule: ModuleConfig = {
+  key: 'products',
+  label: 'Product Batches',
+  singular: 'Batch',
+  path: 'products',
+  icon: moduleByKey.products.icon,
+  description: 'Manage batch inventory, pricing, supplier, and expiry details.',
+  fields: [
+    { name: 'name', label: 'Name', type: 'text' },
+    { name: 'batchNumber', label: 'Batch Number', type: 'text' },
+    { name: 'lotNumber', label: 'Lot Number', type: 'text' },
+    { name: 'supplierName', label: 'Supplier', type: 'text' },
+    { name: 'manufacturingDate', label: 'MFG Date', type: 'date' },
+    { name: 'expiryDate', label: 'Expiry Date', type: 'date' },
+    { name: 'availableQuantity', label: 'Available Qty', type: 'number' },
+    { name: 'mrp', label: 'MRP', type: 'number' },
+    { name: 'sellingPrice', label: 'Selling Price', type: 'number' },
+    { name: 'status', label: 'Status', type: 'text' },
+  ],
+  table: ['name', 'batchNumber', 'lotNumber', 'supplierName', 'manufacturingDate', 'expiryDate', 'availableQuantity', 'mrp', 'sellingPrice', 'status'],
+  statuses: ['Active', 'Inactive', 'Archived'],
+  filters: ['status'],
+};
+
 export function ProductModulePage({ parts }: { parts: string[] }) {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -65,13 +90,16 @@ export function ProductModulePage({ parts }: { parts: string[] }) {
   const route = parseProductRoute(parts);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
+  const [productFilter, setProductFilter] = useState<ProductListFilter>('all');
+  const [categoryPublicId, setCategoryPublicId] = useState('');
   const [confirm, setConfirm] = useState<ConfirmationState>({ open: false, title: '', message: '', confirmLabel: 'Confirm', onConfirm: () => undefined });
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      dispatch(setModuleRecords({ module: 'products', records: await productApi.list() }));
+      dispatch(setModuleRecords({ module: 'products', records: await productApi.list({ filter: productFilter, categoryPublicId }) }));
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : 'Unable to load products';
       setError(message);
@@ -79,11 +107,18 @@ export function ProductModulePage({ parts }: { parts: string[] }) {
     } finally {
       setLoading(false);
     }
-  }, [dispatch]);
+  }, [categoryPublicId, dispatch, productFilter]);
 
   useEffect(() => {
     if (route.mode === 'list') void loadProducts();
   }, [loadProducts, route.mode]);
+
+  useEffect(() => {
+    if (route.mode !== 'list') return;
+    productApi.categories()
+      .then(setCategories)
+      .catch((categoryError) => toast.error(categoryError instanceof Error ? categoryError.message : 'Unable to load categories'));
+  }, [route.mode]);
 
   const askDelete = (ids: string[]) => setConfirm({
     open: true,
@@ -121,11 +156,30 @@ export function ProductModulePage({ parts }: { parts: string[] }) {
     return <VariantViewPage productPublicId={route.productPublicId} variantPublicId={route.variantPublicId} />;
   }
 
+  if (route.mode === 'batches' && route.productPublicId && route.variantPublicId) {
+    return <BatchListPage productPublicId={route.productPublicId} variantPublicId={route.variantPublicId} />;
+  }
+
+  if ((route.mode === 'addBatch' || route.mode === 'editBatch') && route.productPublicId && route.variantPublicId) {
+    return <BatchFormPage productPublicId={route.productPublicId} variantPublicId={route.variantPublicId} batchPublicId={route.batchPublicId} mode={route.mode} />;
+  }
+
+  if (route.mode === 'viewBatch' && route.productPublicId && route.variantPublicId && route.batchPublicId) {
+    return <BatchViewPage productPublicId={route.productPublicId} variantPublicId={route.variantPublicId} batchPublicId={route.batchPublicId} />;
+  }
+
   return (
     <div className="space-y-5">
       <PageTitle title="Products" description={moduleByKey.products.description}>
         <Button onClick={() => router.push('/products/add')}><Plus className="h-4 w-4" /> Add Product</Button>
       </PageTitle>
+      <ProductListFilters
+        categories={categories}
+        filter={productFilter}
+        categoryPublicId={categoryPublicId}
+        onFilterChange={setProductFilter}
+        onCategoryChange={setCategoryPublicId}
+      />
       <DataTable
         module={moduleByKey.products}
         data={records}
@@ -287,6 +341,44 @@ function ProductFields({
   );
 }
 
+function ProductListFilters({
+  categories,
+  filter,
+  categoryPublicId,
+  onFilterChange,
+  onCategoryChange,
+}: {
+  categories: CategoryNode[];
+  filter: ProductListFilter;
+  categoryPublicId: string;
+  onFilterChange: (value: ProductListFilter) => void;
+  onCategoryChange: (value: string) => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
+        <select className={textInput} value={filter} onChange={(event) => onFilterChange(event.target.value as ProductListFilter)}>
+          <option value="all">All Products</option>
+          <option value="active">Active Products</option>
+          <option value="deleted">Deleted Products</option>
+        </select>
+        <select className={textInput} value={categoryPublicId} onChange={(event) => onCategoryChange(event.target.value)}>
+          <option value="">All Categories</option>
+          {categories.map((category) => (
+            <option key={category.categoryPublicId} value={category.categoryPublicId}>{category.categoryName}</option>
+          ))}
+        </select>
+        <Button type="button" variant="outline" onClick={() => {
+          onFilterChange('all');
+          onCategoryChange('');
+        }}>
+          Reset
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function VariantsEditor({ variants, hasBatch, onChange }: { variants: VariantFormState[]; hasBatch: boolean; onChange: (value: VariantFormState[]) => void }) {
   const update = (id: string, patch: Partial<VariantFormState>) => onChange(variants.map((variant) => (variant.productVariantPublicId === id ? { ...variant, ...patch } : variant)));
   return (
@@ -434,11 +526,156 @@ function VariantListPage({ productPublicId }: { productPublicId: string }) {
         onArchive={askDelete}
         onStatus={() => undefined}
         onAdd={() => router.push(`/products/${productPublicId}/add-variant`)}
+        onBatches={(record) => router.push(`/products/${productPublicId}/variants/${record.id}/batches`)}
         onRetry={loadVariants}
         loading={loading}
         error={error}
       />
       <ConfirmationDialog state={confirm} onClose={() => setConfirm((current) => ({ ...current, open: false }))} />
+    </div>
+  );
+}
+
+function BatchListPage({ productPublicId, variantPublicId }: { productPublicId: string; variantPublicId: string }) {
+  const router = useRouter();
+  const [batches, setBatches] = useState<AdminRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmationState>({ open: false, title: '', message: '', confirmLabel: 'Confirm', onConfirm: () => undefined });
+
+  const loadBatches = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setBatches(await productApi.batches(variantPublicId));
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : 'Unable to load batches';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [variantPublicId]);
+
+  useEffect(() => {
+    void loadBatches();
+  }, [loadBatches]);
+
+  const askDelete = (ids: string[]) => setConfirm({
+    open: true,
+    title: ids.length > 1 ? 'Delete selected batches?' : 'Delete this batch?',
+    message: ids.length > 1 ? 'Delete selected batches?' : 'Delete this batch?',
+    confirmLabel: 'Delete',
+    danger: true,
+    onConfirm: () => {
+      return Promise.all(ids.map((batchId) => productApi.removeBatch(batchId)))
+        .then(async () => {
+          toast.success('Deleted successfully');
+          await loadBatches();
+        });
+    },
+  });
+
+  return (
+    <div className="space-y-5">
+      <PageTitle title="Product Batches" description="Manage batches for this product variant." back={() => router.push(`/products/${productPublicId}/variants`)}>
+        <Button onClick={() => router.push(`/products/${productPublicId}/variants/${variantPublicId}/add-batch`)}><Plus className="h-4 w-4" /> Add Batch</Button>
+      </PageTitle>
+      <DataTable
+        module={batchModule}
+        data={batches}
+        onView={(record) => router.push(`/products/${productPublicId}/variants/${variantPublicId}/view-batch/${record.id}`)}
+        onEdit={(record) => router.push(`/products/${productPublicId}/variants/${variantPublicId}/edit-batch/${record.id}`)}
+        onDelete={askDelete}
+        onDuplicate={() => undefined}
+        onArchive={askDelete}
+        onStatus={() => undefined}
+        onAdd={() => router.push(`/products/${productPublicId}/variants/${variantPublicId}/add-batch`)}
+        onRetry={loadBatches}
+        loading={loading}
+        error={error}
+      />
+      <ConfirmationDialog state={confirm} onClose={() => setConfirm((current) => ({ ...current, open: false }))} />
+    </div>
+  );
+}
+
+function BatchFormPage({ productPublicId, variantPublicId, batchPublicId, mode }: { productPublicId: string; variantPublicId: string; batchPublicId?: string; mode: 'addBatch' | 'editBatch' }) {
+  const router = useRouter();
+  const [batch, setBatch] = useState<BatchFormState>(() => emptyBatch());
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(mode === 'editBatch');
+  const backToBatches = () => router.push(`/products/${productPublicId}/variants/${variantPublicId}/batches`);
+
+  useEffect(() => {
+    if (mode !== 'editBatch' || !batchPublicId) return;
+    setLoading(true);
+    productApi.getBatch(batchPublicId)
+      .then((value) => setBatch(batchFromApi(value)))
+      .catch((loadError) => toast.error(loadError instanceof Error ? loadError.message : 'Unable to load batch'))
+      .finally(() => setLoading(false));
+  }, [batchPublicId, mode]);
+
+  const save = async () => {
+    const validation = validateBatch(batch);
+    if (validation) {
+      toast.error(validation);
+      return;
+    }
+    setSaving(true);
+    try {
+      const { open, temporaryUuid, ...payload } = batch;
+      await productApi.createBatch(variantPublicId, {
+        ...payload,
+        productBatchPublicId: mode === 'editBatch' ? batchPublicId || payload.productBatchPublicId : payload.productBatchPublicId,
+      });
+      toast.success(mode === 'editBatch' ? 'Batch Updated Successfully' : 'Batch Created Successfully');
+      backToBatches();
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : 'Unable to save batch');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <LoadingCard label="Loading batch..." />;
+
+  return (
+    <div className="space-y-5">
+      <PageTitle title={mode === 'editBatch' ? 'Edit Batch' : 'Add Batch'} description="Manage batch stock, supplier, pricing, and dates." back={backToBatches} />
+      <Card>
+        <CardContent>
+          <BatchFields batch={batch} onChange={(patch) => setBatch((current) => ({ ...current, ...patch }))} />
+        </CardContent>
+      </Card>
+      <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-background/95 py-4 backdrop-blur">
+        <Button type="button" variant="outline" onClick={backToBatches}>Cancel</Button>
+        <Button type="button" loading={saving} onClick={save}><Save className="h-4 w-4" /> Save Batch</Button>
+      </div>
+    </div>
+  );
+}
+
+function BatchViewPage({ productPublicId, variantPublicId, batchPublicId }: { productPublicId: string; variantPublicId: string; batchPublicId: string }) {
+  const router = useRouter();
+  const [record, setRecord] = useState<BatchFormState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const backToBatches = () => router.push(`/products/${productPublicId}/variants/${variantPublicId}/batches`);
+
+  useEffect(() => {
+    productApi.getBatch(batchPublicId)
+      .then((value) => setRecord(batchFromApi(value)))
+      .catch((loadError) => toast.error(loadError instanceof Error ? loadError.message : 'Unable to load batch'))
+      .finally(() => setLoading(false));
+  }, [batchPublicId]);
+
+  if (loading) return <LoadingCard label="Loading batch..." />;
+  return (
+    <div className="space-y-5">
+      <PageTitle title="View Batch" description="Read-only batch information." back={backToBatches}>
+        <Button variant="outline" onClick={() => router.push(`/products/${productPublicId}/variants/${variantPublicId}/edit-batch/${batchPublicId}`)}><Edit className="h-4 w-4" /> Edit</Button>
+      </PageTitle>
+      {record ? <BatchDetails batch={record} /> : <LoadingCard label="Batch not found" />}
     </div>
   );
 }
@@ -562,31 +799,39 @@ function BatchesEditor({ batches, onChange }: { batches: BatchFormState[]; onCha
             {batch.open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
           {batch.open ? (
-            <div className="grid gap-4 border-t border-border p-3 md:grid-cols-2 xl:grid-cols-3">
-              <TextField label="Name" value={batch.name} onChange={(value) => update(key, { name: value })} />
-              <TextField label="Batch Number" value={batch.batchNumber} onChange={(value) => update(key, { batchNumber: value })} />
-              <TextField label="Lot Number" value={batch.lotNumber} onChange={(value) => update(key, { lotNumber: value })} />
-              <TextField label="Barcode" value={batch.barcode} onChange={(value) => update(key, { barcode: value })} />
-              <TextField label="Supplier Name" value={batch.supplierName} onChange={(value) => update(key, { supplierName: value })} />
-              <DateField label="Manufacturing Date" value={batch.manufacturingDate} onChange={(value) => update(key, { manufacturingDate: value })} />
-              <DateField label="Expiry Date" value={batch.expiryDate} onChange={(value) => update(key, { expiryDate: value })} />
-              <DateField label="Received Date" value={batch.receivedDate} onChange={(value) => update(key, { receivedDate: value })} />
-              <NumberField label="Received Quantity" value={batch.receivedQuantity} onChange={(value) => update(key, { receivedQuantity: value })} />
-              <NumberField label="Available Quantity" value={batch.availableQuantity} onChange={(value) => update(key, { availableQuantity: value })} />
-              <NumberField label="Reserved Quantity" value={batch.reservedQuantity} onChange={(value) => update(key, { reservedQuantity: value })} />
-              <NumberField label="Minimum Quantity" value={batch.minimumQuantity} onChange={(value) => update(key, { minimumQuantity: value })} />
-              <NumberField label="Cost Price" value={batch.costPrice} onChange={(value) => update(key, { costPrice: value })} />
-              <NumberField label="MRP" value={batch.mrp} onChange={(value) => update(key, { mrp: value })} />
-              <NumberField label="Selling Price" value={batch.sellingPrice} onChange={(value) => update(key, { sellingPrice: value })} />
-              <TextField label="Status" value={batch.status} onChange={(value) => update(key, { status: value })} />
-              <SwitchField label="Active" checked={batch.active} onChange={(value) => update(key, { active: value })} />
-              <SwitchField label="Archived" checked={batch.archived} onChange={(value) => update(key, { archived: value })} />
+            <div className="border-t border-border p-3">
+              <BatchFields batch={batch} onChange={(patch) => update(key, patch)} />
               <Button type="button" variant="ghost" className="text-destructive md:self-end" onClick={() => onChange(batches.filter((_, batchIndex) => batchIndex !== index))}><Trash2 className="h-4 w-4" /> Delete Batch</Button>
             </div>
           ) : null}
         </div>
       );
       })}
+    </div>
+  );
+}
+
+function BatchFields({ batch, onChange }: { batch: BatchFormState; onChange: (patch: Partial<BatchFormState>) => void }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <TextField label="Name" value={batch.name} onChange={(value) => onChange({ name: value })} />
+      <TextField label="Batch Number" value={batch.batchNumber} onChange={(value) => onChange({ batchNumber: value })} />
+      <TextField label="Lot Number" value={batch.lotNumber} onChange={(value) => onChange({ lotNumber: value })} />
+      <TextField label="Barcode" value={batch.barcode} onChange={(value) => onChange({ barcode: value })} />
+      <TextField label="Supplier Name" value={batch.supplierName} onChange={(value) => onChange({ supplierName: value })} />
+      <DateField label="Manufacturing Date" value={batch.manufacturingDate} onChange={(value) => onChange({ manufacturingDate: value })} />
+      <DateField label="Expiry Date" value={batch.expiryDate} onChange={(value) => onChange({ expiryDate: value })} />
+      <DateField label="Received Date" value={batch.receivedDate} onChange={(value) => onChange({ receivedDate: value })} />
+      <NumberField label="Received Quantity" value={batch.receivedQuantity} onChange={(value) => onChange({ receivedQuantity: value })} />
+      <NumberField label="Available Quantity" value={batch.availableQuantity} onChange={(value) => onChange({ availableQuantity: value })} />
+      <NumberField label="Reserved Quantity" value={batch.reservedQuantity} onChange={(value) => onChange({ reservedQuantity: value })} />
+      <NumberField label="Minimum Quantity" value={batch.minimumQuantity} onChange={(value) => onChange({ minimumQuantity: value })} />
+      <NumberField label="Cost Price" value={batch.costPrice} onChange={(value) => onChange({ costPrice: value })} />
+      <NumberField label="MRP" value={batch.mrp} onChange={(value) => onChange({ mrp: value })} />
+      <NumberField label="Selling Price" value={batch.sellingPrice} onChange={(value) => onChange({ sellingPrice: value })} />
+      <TextField label="Status" value={batch.status} onChange={(value) => onChange({ status: value })} />
+      <SwitchField label="Active" checked={batch.active} onChange={(value) => onChange({ active: value })} />
+      <SwitchField label="Archived" checked={batch.archived} onChange={(value) => onChange({ archived: value })} />
     </div>
   );
 }
@@ -630,10 +875,29 @@ function TextField({ label, value, onChange, required, textarea }: { label: stri
 }
 
 function NumberField({ label, value, onChange, required }: { label: string; value: number; onChange: (value: number) => void; required?: boolean }) {
+  const [draft, setDraft] = useState(Number.isFinite(value) ? String(value) : '');
+
+  useEffect(() => {
+    const next = Number.isFinite(value) ? String(value) : '';
+    if (Number(draft) !== value && draft !== '' && draft !== '.') setDraft(next);
+  }, [draft, value]);
+
   return (
     <label>
       <span className="mb-1.5 block text-sm font-medium">{label}{required ? ' *' : ''}</span>
-      <input className={textInput} type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <input
+        className={textInput}
+        type="text"
+        inputMode="decimal"
+        pattern="[0-9]*[.]?[0-9]*"
+        value={draft}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          if (!/^\d*\.?\d*$/.test(nextValue)) return;
+          setDraft(nextValue);
+          onChange(nextValue === '' ? 0 : Number(nextValue));
+        }}
+      />
     </label>
   );
 }
@@ -734,6 +998,37 @@ function VariantDetails({ variant }: { variant: VariantFormState }) {
   );
 }
 
+function BatchDetails({ batch }: { batch: BatchFormState }) {
+  return (
+    <div className="space-y-4">
+      <DetailCard title="Batch Information" rows={[
+        ['Name', batch.name],
+        ['Batch Number', batch.batchNumber],
+        ['Lot Number', batch.lotNumber],
+        ['Barcode', batch.barcode],
+        ['Supplier Name', batch.supplierName],
+        ['Status', batch.status],
+        ['Active', batch.active],
+        ['Archived', batch.archived],
+      ]} />
+      <DetailCard title="Dates" rows={[
+        ['Manufacturing Date', batch.manufacturingDate],
+        ['Expiry Date', batch.expiryDate],
+        ['Received Date', batch.receivedDate],
+      ]} />
+      <DetailCard title="Inventory And Pricing" rows={[
+        ['Received Quantity', batch.receivedQuantity],
+        ['Available Quantity', batch.availableQuantity],
+        ['Reserved Quantity', batch.reservedQuantity],
+        ['Minimum Quantity', batch.minimumQuantity],
+        ['Cost Price', batch.costPrice],
+        ['MRP', batch.mrp],
+        ['Selling Price', batch.sellingPrice],
+      ]} />
+    </div>
+  );
+}
+
 function DetailCard({ title, rows }: { title: string; rows: Array<[string, string | number | boolean | undefined]> }) {
   return (
     <Card>
@@ -822,10 +1117,14 @@ function LoadingCard({ label }: { label: string }) {
   return <Card><CardContent className="text-center"><p className="font-semibold">{label}</p></CardContent></Card>;
 }
 
-function parseProductRoute(parts: string[]): { mode: ProductRouteMode; productPublicId?: string; variantPublicId?: string } {
+function parseProductRoute(parts: string[]): { mode: ProductRouteMode; productPublicId?: string; variantPublicId?: string; batchPublicId?: string } {
   if (parts[1] === 'add' || parts[1] === 'new') return { mode: 'add' };
   if (parts[1] === 'edit') return { mode: 'edit', productPublicId: parts[2] };
   if (parts[1] === 'view') return { mode: 'view', productPublicId: parts[2] };
+  if (parts[2] === 'variants' && parts[4] === 'batches') return { mode: 'batches', productPublicId: parts[1], variantPublicId: parts[3] };
+  if (parts[2] === 'variants' && parts[4] === 'add-batch') return { mode: 'addBatch', productPublicId: parts[1], variantPublicId: parts[3] };
+  if (parts[2] === 'variants' && parts[4] === 'edit-batch') return { mode: 'editBatch', productPublicId: parts[1], variantPublicId: parts[3], batchPublicId: parts[5] };
+  if (parts[2] === 'variants' && parts[4] === 'view-batch') return { mode: 'viewBatch', productPublicId: parts[1], variantPublicId: parts[3], batchPublicId: parts[5] };
   if (parts[2] === 'variants') return { mode: 'variants', productPublicId: parts[1] };
   if (parts[2] === 'add-variant') return { mode: 'addVariant', productPublicId: parts[1] };
   if (parts[2] === 'edit-variant') return { mode: 'editVariant', productPublicId: parts[1], variantPublicId: parts[3] };
@@ -983,9 +1282,20 @@ function validateVariant(variant: VariantFormState): string | null {
   if (!variant.measuringUnit.trim()) return 'Measuring Unit is required';
   if (variant.amount <= 0) return 'Amount is required';
   for (const batch of variant.batchList) {
-    if (batch.expiryDate && batch.manufacturingDate && batch.expiryDate < batch.manufacturingDate) return 'Expiry Date must be after Manufacturing Date';
-    if (batch.receivedDate && batch.manufacturingDate && batch.receivedDate < batch.manufacturingDate) return 'Received Date must be after Manufacturing Date';
+    const message = validateBatch(batch);
+    if (message) return message;
   }
+  return null;
+}
+
+function validateBatch(batch: BatchFormState): string | null {
+  if (batch.expiryDate && batch.manufacturingDate && batch.expiryDate < batch.manufacturingDate) return 'Expiry Date must be after Manufacturing Date';
+  if (batch.receivedDate && batch.manufacturingDate && batch.receivedDate < batch.manufacturingDate) return 'Received Date must be after Manufacturing Date';
+  if (batch.receivedQuantity < 0) return 'Received Quantity must be zero or more';
+  if (batch.availableQuantity < 0) return 'Available Quantity must be zero or more';
+  if (batch.reservedQuantity < 0) return 'Reserved Quantity must be zero or more';
+  if (batch.minimumQuantity < 0) return 'Minimum Quantity must be zero or more';
+  if (batch.sellingPrice > batch.mrp && batch.mrp > 0) return 'Batch Selling Price must be less than or equal to MRP';
   return null;
 }
 
@@ -1053,6 +1363,11 @@ function variantFromApi(value: unknown): VariantFormState {
 
 function batchFromApi(value: unknown): BatchFormState {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const apiBoolean = (nextValue: unknown, fallback: boolean) => {
+    if (typeof nextValue === 'boolean') return nextValue;
+    if (typeof nextValue === 'string') return ['true', 'active', 'yes'].includes(nextValue.toLowerCase());
+    return fallback;
+  };
   return {
     ...emptyBatch(),
     temporaryUuid: crypto.randomUUID(),
@@ -1062,9 +1377,9 @@ function batchFromApi(value: unknown): BatchFormState {
     lotNumber: String(source.lotNumber ?? ''),
     barcode: String(source.barcode ?? ''),
     supplierName: String(source.supplierName ?? ''),
-    manufacturingDate: String(source.manufacturingDate ?? ''),
-    expiryDate: String(source.expiryDate ?? ''),
-    receivedDate: String(source.receivedDate ?? ''),
+    manufacturingDate: String(source.manufacturingDate ?? '').slice(0, 10),
+    expiryDate: String(source.expiryDate ?? '').slice(0, 10),
+    receivedDate: String(source.receivedDate ?? '').slice(0, 10),
     receivedQuantity: Number(source.receivedQuantity ?? 0),
     availableQuantity: Number(source.availableQuantity ?? 0),
     reservedQuantity: Number(source.reservedQuantity ?? 0),
@@ -1072,8 +1387,8 @@ function batchFromApi(value: unknown): BatchFormState {
     costPrice: Number(source.costPrice ?? 0),
     mrp: Number(source.mrp ?? 0),
     sellingPrice: Number(source.sellingPrice ?? 0),
-    active: Boolean(source.active ?? true),
+    active: apiBoolean(source.active ?? source.isActive, true),
     status: String(source.status ?? 'Active'),
-    archived: Boolean(source.archived ?? false),
+    archived: apiBoolean(source.archived, false),
   };
 }

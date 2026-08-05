@@ -6,6 +6,7 @@ const PRODUCT_API_PATH = '/e-comm-admin/product/v1';
 const CATEGORY_API_PATH = '/e-comm-admin/category/v1';
 
 type ApiObject = Record<string, unknown>;
+type ProductListFilter = 'all' | 'active' | 'deleted';
 
 export type CategoryNode = {
   categoryPublicId: string;
@@ -193,6 +194,31 @@ export function normalizeVariant(value: unknown): AdminRecord {
   };
 }
 
+export function normalizeBatch(value: unknown): AdminRecord {
+  const source = (value && typeof value === 'object' ? value : {}) as ApiObject;
+  const productBatchPublicId = String(field(source, ['productBatchPublicId', 'batchPublicId', 'publicId', 'id', '_id']) ?? '');
+  const active = field(source, ['active', 'isActive']);
+  const status = typeof active === 'boolean' ? (active ? 'Active' : 'Inactive') : String(field(source, ['status']) ?? 'Active');
+
+  return {
+    id: productBatchPublicId,
+    productBatchPublicId,
+    name: String(field(source, ['name']) ?? ''),
+    batchNumber: String(field(source, ['batchNumber']) ?? ''),
+    lotNumber: String(field(source, ['lotNumber']) ?? ''),
+    barcode: String(field(source, ['barcode']) ?? ''),
+    supplierName: String(field(source, ['supplierName']) ?? ''),
+    manufacturingDate: String(field(source, ['manufacturingDate']) ?? '').slice(0, 10),
+    expiryDate: String(field(source, ['expiryDate']) ?? '').slice(0, 10),
+    availableQuantity: toNumber(field(source, ['availableQuantity'])),
+    mrp: toNumber(field(source, ['mrp'])),
+    sellingPrice: toNumber(field(source, ['sellingPrice'])),
+    status,
+    createdAt: String(field(source, ['createdAt', 'createdDate']) ?? today()).slice(0, 10),
+    updatedAt: String(field(source, ['updatedAt', 'updatedDate']) ?? today()).slice(0, 10),
+  };
+}
+
 function normalizeList(response: unknown): AdminRecord[] {
   const data = unwrap(response);
   if (Array.isArray(data)) return data.map(normalizeProduct).filter((record) => record.id);
@@ -207,6 +233,21 @@ function normalizeVariantList(response: unknown): AdminRecord[] {
     if (Array.isArray(variants)) return variants.map(normalizeVariant).filter((record) => record.id);
   }
   return [];
+}
+
+function normalizeBatchList(response: unknown): AdminRecord[] {
+  const data = unwrap(response);
+  if (Array.isArray(data)) return data.map(normalizeBatch).filter((record) => record.id);
+  if (data && typeof data === 'object') {
+    const batches = field(data as ApiObject, ['batchList', 'productBatchList', 'batches']);
+    if (Array.isArray(batches)) return batches.map(normalizeBatch).filter((record) => record.id);
+  }
+  return [];
+}
+
+function batchRequestPayload(batch: ProductBatchPayload) {
+  const { active, ...rest } = batch;
+  return { ...rest, isActive: active };
 }
 
 export function extractVariantPublicIds(response: unknown): string[] {
@@ -225,8 +266,10 @@ export const productApi = {
     const data = unwrap(await categoryRequest<unknown>('/get-all'));
     return Array.isArray(data) ? data.map(normalizeCategoryTree).filter((category) => category.categoryPublicId) : [];
   },
-  async list() {
-    return normalizeList(await request<unknown>('/get-all?filter=all'));
+  async list(options?: { filter?: ProductListFilter; categoryPublicId?: string }) {
+    const params = new URLSearchParams({ filter: options?.filter ?? 'all' });
+    if (options?.categoryPublicId) params.set('categoryPublicId', options.categoryPublicId);
+    return normalizeList(await request<unknown>(`/get-all?${params.toString()}`));
   },
   async get(productPublicId: string) {
     return unwrap(await request<unknown>(`/get/${productPublicId}`));
@@ -256,6 +299,19 @@ export const productApi = {
   async removeVariant(productPublicId: string, variantPublicId: string) {
     await request<unknown>(`/variant/delete/${variantPublicId}`, { method: 'DELETE' });
     return variantPublicId;
+  },
+  async batches(productVariantPublicId: string) {
+    return normalizeBatchList(await request<unknown>(`/variant/${productVariantPublicId}/batch/get-all`));
+  },
+  async getBatch(productBatchPublicId: string) {
+    return unwrap(await request<unknown>(`/batch/get/${productBatchPublicId}`));
+  },
+  async createBatch(productVariantPublicId: string, payload: ProductBatchPayload) {
+    return request<unknown>(`/variant/${productVariantPublicId}/batch/create`, { method: 'POST', body: JSON.stringify(batchRequestPayload(payload)) });
+  },
+  async removeBatch(productBatchPublicId: string) {
+    await request<unknown>(`/batch/delete/${productBatchPublicId}`, { method: 'DELETE' });
+    return productBatchPublicId;
   },
   async uploadVariantImages(productVariantPublicId: string, images: File[]) {
     if (!images.length) return null;

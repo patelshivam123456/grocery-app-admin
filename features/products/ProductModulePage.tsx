@@ -34,6 +34,7 @@ type VariantFormState = Omit<ProductVariantPayload, 'batchList'> & {
 type BatchFormState = ProductBatchPayload & { open: boolean; temporaryUuid: string };
 type KeyValueRow = { id: string; keyName: string; value: string };
 type ProductListFilter = 'all' | 'active' | 'deleted';
+type ProductHeaderContext = { productName: string; variantName?: string };
 
 const textInput = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-ring transition focus:ring-2 disabled:cursor-not-allowed disabled:opacity-55';
 const areaInput = `${textInput} min-h-28 py-2`;
@@ -407,6 +408,7 @@ function VariantFormPage({ productPublicId, variantPublicId, mode }: { productPu
   const [variant, setVariant] = useState<VariantFormState>(() => emptyVariant());
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(mode === 'editVariant');
+  const headerContext = useProductHeaderContext(productPublicId);
 
   useEffect(() => {
     if (mode !== 'editVariant' || !variantPublicId) return;
@@ -456,7 +458,12 @@ function VariantFormPage({ productPublicId, variantPublicId, mode }: { productPu
 
   return (
     <div className="space-y-5">
-      <PageTitle title={mode === 'editVariant' ? 'Edit Variant' : 'Add Variant'} description="Manage variant pricing, stock, images, and batches." back={() => router.push(`/products/${productPublicId}/variants`)} />
+      <PageTitle
+        title={mode === 'editVariant' ? 'Edit Variant' : 'Add Variant'}
+        description="Manage variant pricing, stock, images, and batches."
+        back={() => router.push(`/products/${productPublicId}/variants`)}
+        context={<ProductContextBar context={headerContext} />}
+      />
       <Card>
         <CardContent className="space-y-4">
           <VariantFields variant={variant} onChange={(patch) => setVariant((current) => ({ ...current, ...patch }))} />
@@ -478,6 +485,7 @@ function VariantListPage({ productPublicId }: { productPublicId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmationState>({ open: false, title: '', message: '', confirmLabel: 'Confirm', onConfirm: () => undefined });
+  const headerContext = useProductHeaderContext(productPublicId);
 
   const loadVariants = useCallback(async () => {
     setLoading(true);
@@ -514,7 +522,7 @@ function VariantListPage({ productPublicId }: { productPublicId: string }) {
 
   return (
     <div className="space-y-5">
-      <PageTitle title="Product Variants" description="Manage product variants, pricing, stock, and batches." back={() => router.push('/products')}>
+      <PageTitle title="Product Variants" description="Manage product variants, pricing, stock, and batches." back={() => router.push('/products')} context={<ProductContextBar context={headerContext} />}>
         <Button onClick={() => router.push(`/products/${productPublicId}/add-variant`)}><Plus className="h-4 w-4" /> Add Variant</Button>
       </PageTitle>
       <DataTable
@@ -543,6 +551,7 @@ function BatchListPage({ productPublicId, variantPublicId }: { productPublicId: 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmationState>({ open: false, title: '', message: '', confirmLabel: 'Confirm', onConfirm: () => undefined });
+  const headerContext = useProductHeaderContext(productPublicId, variantPublicId);
 
   const loadBatches = useCallback(async () => {
     setLoading(true);
@@ -579,7 +588,7 @@ function BatchListPage({ productPublicId, variantPublicId }: { productPublicId: 
 
   return (
     <div className="space-y-5">
-      <PageTitle title="Product Batches" description="Manage batches for this product variant." back={() => router.push(`/products/${productPublicId}/variants`)}>
+      <PageTitle title="Product Batches" description="Manage batches for this product variant." back={() => router.push(`/products/${productPublicId}/variants`)} context={<ProductContextBar context={headerContext} />}>
         <Button onClick={() => router.push(`/products/${productPublicId}/variants/${variantPublicId}/add-batch`)}><Plus className="h-4 w-4" /> Add Batch</Button>
       </PageTitle>
       <DataTable
@@ -607,6 +616,7 @@ function BatchFormPage({ productPublicId, variantPublicId, batchPublicId, mode }
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(mode === 'editBatch');
   const backToBatches = () => router.push(`/products/${productPublicId}/variants/${variantPublicId}/batches`);
+  const headerContext = useProductHeaderContext(productPublicId, variantPublicId);
 
   useEffect(() => {
     if (mode !== 'editBatch' || !batchPublicId) return;
@@ -643,7 +653,12 @@ function BatchFormPage({ productPublicId, variantPublicId, batchPublicId, mode }
 
   return (
     <div className="space-y-5">
-      <PageTitle title={mode === 'editBatch' ? 'Edit Batch' : 'Add Batch'} description="Manage batch stock, supplier, pricing, and dates." back={backToBatches} />
+      <PageTitle
+        title={mode === 'editBatch' ? 'Edit Batch' : 'Add Batch'}
+        description="Manage batch stock, supplier, pricing, and dates."
+        back={backToBatches}
+        context={<ProductContextBar context={headerContext} />}
+      />
       <Card>
         <CardContent>
           <BatchFields batch={batch} onChange={(patch) => setBatch((current) => ({ ...current, ...patch }))} />
@@ -662,6 +677,7 @@ function BatchViewPage({ productPublicId, variantPublicId, batchPublicId }: { pr
   const [record, setRecord] = useState<BatchFormState | null>(null);
   const [loading, setLoading] = useState(true);
   const backToBatches = () => router.push(`/products/${productPublicId}/variants/${variantPublicId}/batches`);
+  const headerContext = useProductHeaderContext(productPublicId, variantPublicId);
 
   useEffect(() => {
     productApi.getBatch(batchPublicId)
@@ -673,7 +689,7 @@ function BatchViewPage({ productPublicId, variantPublicId, batchPublicId }: { pr
   if (loading) return <LoadingCard label="Loading batch..." />;
   return (
     <div className="space-y-5">
-      <PageTitle title="View Batch" description="Read-only batch information." back={backToBatches}>
+      <PageTitle title="View Batch" description="Read-only batch information." back={backToBatches} context={<ProductContextBar context={headerContext} />}>
         <Button variant="outline" onClick={() => router.push(`/products/${productPublicId}/variants/${variantPublicId}/edit-batch/${batchPublicId}`)}><Edit className="h-4 w-4" /> Edit</Button>
       </PageTitle>
       {record ? <BatchDetails batch={record} /> : <LoadingCard label="Batch not found" />}
@@ -709,6 +725,7 @@ function VariantViewPage({ productPublicId, variantPublicId }: { productPublicId
   const router = useRouter();
   const [record, setRecord] = useState<VariantFormState | null>(null);
   const [loading, setLoading] = useState(true);
+  const headerContext = useProductHeaderContext(productPublicId);
 
   useEffect(() => {
     productApi.getVariant(productPublicId, variantPublicId)
@@ -720,7 +737,7 @@ function VariantViewPage({ productPublicId, variantPublicId }: { productPublicId
   if (loading) return <LoadingCard label="Loading variant..." />;
   return (
     <div className="space-y-5">
-      <PageTitle title="View Variant" description="Read-only variant information with batches." back={() => router.push(`/products/${productPublicId}/variants`)}>
+      <PageTitle title="View Variant" description="Read-only variant information with batches." back={() => router.push(`/products/${productPublicId}/variants`)} context={<ProductContextBar context={headerContext} />}>
         <Button variant="outline" onClick={() => router.push(`/products/${productPublicId}/edit-variant/${variantPublicId}`)}><Edit className="h-4 w-4" /> Edit</Button>
       </PageTitle>
       {record ? <VariantDetails variant={record} /> : <LoadingCard label="Variant not found" />}
@@ -1100,7 +1117,7 @@ function BatchTable({ batches, title }: { batches: BatchFormState[]; title: stri
   );
 }
 
-function PageTitle({ title, description, back, children }: { title: string; description: string; back?: () => void; children?: ReactNode }) {
+function PageTitle({ title, description, back, context, children }: { title: string; description: string; back?: () => void; context?: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
@@ -1110,11 +1127,49 @@ function PageTitle({ title, description, back, children }: { title: string; desc
           <span>{title}</span>
         </div>
         <h1 className="truncate text-2xl font-bold tracking-normal">{title}</h1>
+        {context}
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>
       </div>
       {children ? <div className="flex flex-wrap gap-2">{children}</div> : null}
     </div>
   );
+}
+
+function ProductContextBar({ context }: { context: ProductHeaderContext | null }) {
+  if (!context?.productName) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-foreground">
+      <span>Product: {context.productName}</span>
+      {context.variantName ? <span>Variant: {context.variantName}</span> : null}
+    </div>
+  );
+}
+
+function useProductHeaderContext(productPublicId: string, variantPublicId?: string) {
+  const [context, setContext] = useState<ProductHeaderContext | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setContext(null);
+    productApi.get(productPublicId)
+      .then(async (value) => {
+        const product = productFromApi(value);
+        let variantName = product.productVariantList.find((variant) => variant.productVariantPublicId === variantPublicId)?.variantName;
+        if (variantPublicId && !variantName) {
+          const variant = variantFromApi(await productApi.getVariant(productPublicId, variantPublicId));
+          variantName = variant.variantName;
+        }
+        if (mounted) setContext({ productName: product.name, variantName });
+      })
+      .catch(() => {
+        if (mounted) setContext(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [productPublicId, variantPublicId]);
+
+  return context;
 }
 
 function SectionTitle({ title, action }: { title: string; action?: ReactNode }) {

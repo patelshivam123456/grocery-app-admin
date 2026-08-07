@@ -1,14 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel,
   useReactTable, type ColumnDef, type SortingState, type VisibilityState
 } from '@tanstack/react-table';
-import { Archive, ArrowUpDown, Boxes, Columns3, Copy, Download, Edit, Eye, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react';
-import type { AdminRecord, ModuleConfig } from '@/types/admin';
+import { Archive, ArrowUpDown, Boxes, ChevronLeft, ChevronRight, Columns3, Copy, Download, Edit, Eye, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react';
+import type { AdminRecord, AdminValue, ModuleConfig } from '@/types/admin';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Modal } from '@/components/modals/Modal';
 import { StatusChip } from '@/components/common/StatusChip';
 import { Pagination } from '@/components/tables/Pagination';
 import { Filters } from '@/components/tables/Filters';
@@ -34,6 +35,12 @@ type Props = {
   error?: string | null;
 };
 
+type ImagePreviewState = {
+  images: string[];
+  index: number;
+  title: string;
+};
+
 export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate, onArchive, onStatus, onAdd, onAddSubCategory, onVariants, onBatches, onRetry, loading, error }: Props) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [query, setQuery] = useState('');
@@ -42,6 +49,12 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [columnQuery, setColumnQuery] = useState('');
   const [rowSelection, setRowSelection] = useState({});
+  const [imagePreview, setImagePreview] = useState<ImagePreviewState | null>(null);
+
+  const openImagePreview = useCallback((images: string[], title: string) => {
+    if (!images.length) return;
+    setImagePreview({ images, title, index: 0 });
+  }, []);
 
   const filteredData = useMemo(() => data.filter((record) => {
     const matchesSearch = JSON.stringify(record).toLowerCase().includes(query.toLowerCase());
@@ -67,7 +80,10 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
       cell: ({ row }) => {
         const value = row.original[key];
         if (key.toLowerCase().includes('status') && typeof value === 'string') return <StatusChip status={value} />;
-        if (module.imageField === key && typeof value === 'string' && value.trim()) return <img src={value} alt="" className="h-10 w-10 rounded-md object-cover" />;
+        if (module.imageField === key) {
+          const images = imageValues(value);
+          return <ImageCell images={images} title={readable(row.original.variantName ?? row.original.name ?? row.original.productName)} onOpen={openImagePreview} />;
+        }
         return <span className="line-clamp-2">{readable(value)}</span>;
       },
     })),
@@ -88,7 +104,7 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
         </div>
       ),
     },
-  ], [module, onAddSubCategory, onArchive, onBatches, onDelete, onDuplicate, onEdit, onVariants, onView]);
+  ], [module, onAddSubCategory, onArchive, onBatches, onDelete, onDuplicate, onEdit, onVariants, onView, openImagePreview]);
 
   const table = useReactTable({
     data: filteredData,
@@ -213,6 +229,89 @@ export function DataTable({ module, data, onView, onEdit, onDelete, onDuplicate,
         </div>
       ) : <div className="p-4"><EmptyState title={`No ${module.label.toLowerCase()} found`} actionLabel={`Add ${module.singular}`} onAction={onAdd} /></div>}
       <Pagination page={table.getState().pagination.pageIndex} pageCount={table.getPageCount()} onPage={table.setPageIndex} />
+      <ImagePreviewModal preview={imagePreview} onChange={setImagePreview} onClose={() => setImagePreview(null)} />
     </Card>
+  );
+}
+
+function imageValues(value: AdminValue | undefined) {
+  if (Array.isArray(value)) return value.map((item) => item.trim()).filter(Boolean);
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
+}
+
+function ImageCell({ images, title, onOpen }: { images: string[]; title: string; onOpen: (images: string[], title: string) => void }) {
+  if (!images.length) return <span className="text-muted-foreground">-</span>;
+  return (
+    <button
+      type="button"
+      className="group relative h-12 w-12 overflow-hidden rounded-md border border-border bg-muted"
+      title="View images"
+      onClick={() => onOpen(images, title)}
+    >
+      <img src={images[0]} alt={title} className="h-full w-full object-cover transition group-hover:scale-105" />
+      {images.length > 1 ? (
+        <span className="absolute bottom-1 right-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+          +{images.length - 1}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function ImagePreviewModal({
+  preview,
+  onChange,
+  onClose,
+}: {
+  preview: ImagePreviewState | null;
+  onChange: (preview: ImagePreviewState) => void;
+  onClose: () => void;
+}) {
+  const image = preview?.images[preview.index] ?? '';
+  const count = preview?.images.length ?? 0;
+  const previous = () => {
+    if (!preview) return;
+    onChange({ ...preview, index: (preview.index - 1 + preview.images.length) % preview.images.length });
+  };
+  const next = () => {
+    if (!preview) return;
+    onChange({ ...preview, index: (preview.index + 1) % preview.images.length });
+  };
+
+  return (
+    <Modal open={Boolean(preview)} title={preview?.title || 'Image Preview'} onClose={onClose}>
+      {preview ? (
+        <div className="space-y-4">
+          <div className="relative flex min-h-[320px] items-center justify-center rounded-md bg-muted">
+            <img src={image} alt={preview.title} className="max-h-[65vh] w-full rounded-md object-contain" />
+            {count > 1 ? (
+              <>
+                <Button type="button" variant="outline" className="absolute left-3 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-card/90 p-0" onClick={previous}>
+                  <ChevronLeft className="h-5 w-5" />
+                </Button>
+                <Button type="button" variant="outline" className="absolute right-3 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-card/90 p-0" onClick={next}>
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
+              </>
+            ) : null}
+          </div>
+          {count > 1 ? (
+            <div className="flex items-center justify-center gap-2">
+              {preview.images.map((previewImage, index) => (
+                <button
+                  key={`${previewImage}-${index}`}
+                  type="button"
+                  className={`h-14 w-14 overflow-hidden rounded-md border ${index === preview.index ? 'border-primary ring-2 ring-ring' : 'border-border'}`}
+                  onClick={() => onChange({ ...preview, index })}
+                >
+                  <img src={previewImage} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </Modal>
   );
 }

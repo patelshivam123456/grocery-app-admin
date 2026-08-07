@@ -134,6 +134,40 @@ function toStringArray(value: unknown): string[] {
   return [];
 }
 
+function categoryNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object') return String(field(item as ApiObject, ['categoryName', 'name', 'subCategoryName']) ?? '');
+    return '';
+  }).map((item) => item.trim()).filter(Boolean);
+}
+
+function imageUrls(source: ApiObject): string[] {
+  const imageFields = ['featuredImage', 'image', 'imageUrl', 'productImage1', 'productImage2', 'productImage3', 'productImage4', 'productImage5']
+    .map((name) => source[name])
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean);
+  const imageList = field(source, ['galleryImages', 'images', 'productImages', 'productImageList', 'imagePreviews']);
+  const listUrls = Array.isArray(imageList)
+    ? imageList.map((item) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object') return String(field(item as ApiObject, ['url', 'imageUrl', 'src', 'path']) ?? '');
+      return '';
+    }).map((item) => item.trim()).filter(Boolean)
+    : [];
+  return Array.from(new Set([...imageFields, ...listUrls]));
+}
+
+function productImageUrls(source: ApiObject): string[] {
+  const directImages = imageUrls(source);
+  const variants = field(source, ['productVariantList', 'variantList', 'variants']);
+  const variantImages = Array.isArray(variants)
+    ? variants.flatMap((variant) => imageUrls((variant && typeof variant === 'object' ? variant : {}) as ApiObject))
+    : [];
+  return Array.from(new Set([...directImages, ...variantImages]));
+}
+
 export function normalizeCategoryTree(value: unknown): CategoryNode {
   const source = (value && typeof value === 'object' ? value : {}) as ApiObject;
   const children = field(source, ['subCategoryDtoList', 'children', 'subCategories']);
@@ -151,8 +185,16 @@ export function normalizeProduct(value: unknown): AdminRecord {
   const hasBatch = toBoolean(field(source, ['hasBatch']), false);
   const active = field(source, ['active', 'isActive']);
   const status = typeof active === 'boolean' ? (active ? 'Active' : 'Inactive') : String(field(source, ['status']) ?? 'Active');
-  const categoryNames = field(source, ['categoryNameList', 'categories', 'categoryList']);
-  const categoryIds = field(source, ['categoryPublicIdList']);
+  const categoryNameSource = field(source, ['categoryNameList', 'categoryNames', 'categories', 'categoryList']);
+  const categoryDisplayNames = categoryNames(categoryNameSource);
+  const categoryName = String(field(source, ['categoryName', 'category']) ?? '').trim() || categoryDisplayNames[0] || '';
+  const subcategoryName = String(field(source, ['subCategoryName', 'subcategoryName', 'subCategory', 'subcategory']) ?? '').trim()
+    || categoryDisplayNames.slice(1).join(' > ');
+  const categoryIds = toStringArray(field(source, ['categoryPublicIdList', 'categoryPublicIds', 'categoryIds']));
+  const fallbackCategoryIds = ['categoryPublicId', 'categoryId', 'subCategoryPublicId', 'subcategoryPublicId', 'subCategoryId', 'childCategoryPublicId']
+    .map((name) => String(source[name] ?? '').trim())
+    .filter(Boolean);
+  const categoryPublicIdList = categoryIds.length ? categoryIds : fallbackCategoryIds;
   const createdAt = String(field(source, ['createdAt', 'createdDate']) ?? today()).slice(0, 10);
   const updatedAt = String(field(source, ['updatedAt', 'updatedDate']) ?? today()).slice(0, 10);
 
@@ -164,7 +206,11 @@ export function normalizeProduct(value: unknown): AdminRecord {
     brand: String(field(source, ['brand']) ?? ''),
     sku: String(field(source, ['sku']) ?? ''),
     slug: String(field(source, ['slug']) ?? ''),
-    categories: Array.isArray(categoryNames) ? categoryNames.map(String).join(', ') : toStringArray(categoryIds).join(', '),
+    categories: categoryDisplayNames.length ? categoryDisplayNames.join(', ') : categoryPublicIdList.join(', '),
+    category: categoryName || categoryPublicIdList[0] || '',
+    subcategory: subcategoryName || categoryPublicIdList.slice(1).join(' > '),
+    categoryPublicIdList,
+    featuredImage: productImageUrls(source),
     hasVariant,
     hasBatch,
     status,
@@ -183,6 +229,7 @@ export function normalizeVariant(value: unknown): AdminRecord {
     id: productVariantPublicId,
     productVariantPublicId,
     variantName: String(field(source, ['variantName', 'name']) ?? ''),
+    images: imageUrls(source),
     mrp: toNumber(field(source, ['mrp'])),
     sellingPrice: toNumber(field(source, ['sellingPrice'])),
     stockQuantity: toNumber(field(source, ['stockQuantity', 'stock'])),

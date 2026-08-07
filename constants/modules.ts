@@ -67,7 +67,7 @@ export const modules: ModuleConfig[] = [
     key: 'products', label: 'Products', singular: 'Product', path: 'products', icon: Package,
     description: 'Create, duplicate, price, publish, and merchandize catalog products.',
     statuses: ['Active', 'Inactive', 'Draft', 'Archived'], filters: ['brand', 'status', 'hasVariant', 'hasBatch'], imageField: 'featuredImage',
-    table: ['productName', 'brand', 'sku', 'slug', 'categories', 'hasVariant', 'hasBatch', 'status'],
+    table: ['featuredImage', 'productName', 'brand', 'sku', 'slug', 'category', 'subcategory', 'hasVariant', 'hasBatch', 'status'],
     fields: [
       field('productName', 'Product Name', 'text', 'Basic Information', undefined, true), field('slug', 'Slug', 'text', 'Basic Information', undefined, true),
       field('sku', 'SKU', 'text', 'Basic Information', undefined, true), field('barcode', 'Barcode', 'text', 'Basic Information'),

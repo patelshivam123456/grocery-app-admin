@@ -49,6 +49,7 @@ const variantModule: ModuleConfig = {
   description: 'Manage product variants, inventory, imagery, and batches.',
   fields: [
     { name: 'variantName', label: 'Variant Name', type: 'text' },
+    { name: 'images', label: 'Image', type: 'images' },
     { name: 'mrp', label: 'MRP', type: 'number' },
     { name: 'sellingPrice', label: 'Selling Price', type: 'number' },
     { name: 'stockQuantity', label: 'Stock', type: 'number' },
@@ -56,9 +57,10 @@ const variantModule: ModuleConfig = {
     { name: 'amount', label: 'Amount', type: 'number' },
     { name: 'status', label: 'Status', type: 'text' },
   ],
-  table: ['variantName', 'mrp', 'sellingPrice', 'stockQuantity', 'measuringUnit', 'amount', 'status'],
+  table: ['images', 'variantName', 'mrp', 'sellingPrice', 'stockQuantity', 'measuringUnit', 'amount', 'status'],
   statuses: ['Active', 'Inactive', 'Archived'],
   filters: ['status'],
+  imageField: 'images',
 };
 
 const batchModule: ModuleConfig = {
@@ -122,6 +124,8 @@ export function ProductModulePage({ parts }: { parts: string[] }) {
       .catch((categoryError) => toast.error(categoryError instanceof Error ? categoryError.message : 'Unable to load categories'));
   }, [route.mode]);
 
+  const productRows = useMemo(() => records.map((record) => withCategoryNames(record, categories)), [categories, records]);
+
   const askDelete = (ids: string[]) => setConfirm({
     open: true,
     title: ids.length > 1 ? 'Delete selected products?' : 'Delete this product?',
@@ -184,7 +188,7 @@ export function ProductModulePage({ parts }: { parts: string[] }) {
       />
       <DataTable
         module={moduleByKey.products}
-        data={records}
+        data={productRows}
         onView={(record) => router.push(`/products/view/${record.id}`)}
         onEdit={(record) => router.push(`/products/edit/${record.id}`)}
         onDelete={askDelete}
@@ -379,6 +383,44 @@ function ProductListFilters({
       </CardContent>
     </Card>
   );
+}
+
+function withCategoryNames(record: AdminRecord, categories: CategoryNode[]): AdminRecord {
+  const ids = recordCategoryIds(record);
+  const names = categoryNamesForIds(ids, categories);
+  if (!names.length) return record;
+  return {
+    ...record,
+    category: names[0] ?? record.category,
+    subcategory: names.slice(1).join(' > ') || record.subcategory,
+    categories: names.join(' > '),
+  };
+}
+
+function recordCategoryIds(record: Record<string, unknown>) {
+  const value = record.categoryPublicIdList ?? record.categories;
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function categoryNamesForIds(ids: string[], categories: CategoryNode[]) {
+  if (!ids.length || !categories.length) return [];
+  let level = categories;
+  return ids.map((id) => {
+    const category = level.find((item) => item.categoryPublicId === id) ?? findCategoryById(categories, id);
+    if (category?.subCategoryDtoList?.length) level = category.subCategoryDtoList;
+    return category?.categoryName ?? '';
+  }).filter(Boolean);
+}
+
+function findCategoryById(categories: CategoryNode[], id: string): CategoryNode | undefined {
+  for (const category of categories) {
+    if (category.categoryPublicId === id) return category;
+    const child = findCategoryById(category.subCategoryDtoList, id);
+    if (child) return child;
+  }
+  return undefined;
 }
 
 function VariantsEditor({ variants, hasBatch, onChange }: { variants: VariantFormState[]; hasBatch: boolean; onChange: (value: VariantFormState[]) => void }) {
@@ -700,6 +742,7 @@ function BatchViewPage({ productPublicId, variantPublicId, batchPublicId }: { pr
 function ProductViewPage({ productPublicId }: { productPublicId: string }) {
   const router = useRouter();
   const [record, setRecord] = useState<ProductFormState | null>(null);
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -709,6 +752,12 @@ function ProductViewPage({ productPublicId }: { productPublicId: string }) {
       .finally(() => setLoading(false));
   }, [productPublicId]);
 
+  useEffect(() => {
+    productApi.categories()
+      .then(setCategories)
+      .catch((categoryError) => toast.error(categoryError instanceof Error ? categoryError.message : 'Unable to load categories'));
+  }, []);
+
   if (loading) return <LoadingCard label="Loading product..." />;
   return (
     <div className="space-y-5">
@@ -716,7 +765,7 @@ function ProductViewPage({ productPublicId }: { productPublicId: string }) {
         <Button variant="outline" onClick={() => router.push(`/products/edit/${productPublicId}`)}><Edit className="h-4 w-4" /> Edit</Button>
         <Button onClick={() => router.push(`/products/${productPublicId}/variants`)}>Variants</Button>
       </PageTitle>
-      {record ? <ProductDetails product={record} /> : <LoadingCard label="Product not found" />}
+      {record ? <ProductDetails product={record} categories={categories} /> : <LoadingCard label="Product not found" />}
     </div>
   );
 }
@@ -950,7 +999,7 @@ function SwitchField({ label, checked, onChange }: { label: string; checked: boo
   );
 }
 
-function ProductDetails({ product }: { product: ProductFormState }) {
+function ProductDetails({ product, categories }: { product: ProductFormState; categories: CategoryNode[] }) {
   return (
     <div className="space-y-4">
       <DetailCard title="Product Information" rows={[
@@ -965,7 +1014,7 @@ function ProductDetails({ product }: { product: ProductFormState }) {
         ['Has Variant', product.hasVariant],
         ['Has Batch', product.hasBatch],
       ]} />
-      <DetailCard title="Category" rows={product.categoryPublicIdList.map((categoryId, index) => [`Level ${index + 1}`, categoryId])} />
+      <DetailCard title="Category" rows={categoryDetailRows(product.categoryPublicIdList, categories)} />
       <DetailCard title="Description" rows={[
         ['Short Description', product.shortDescription],
         ['Description', product.description],
@@ -1026,6 +1075,11 @@ function VariantDetails({ variant }: { variant: VariantFormState }) {
       <BatchTable batches={variant.batchList} title="Batch List" />
     </div>
   );
+}
+
+function categoryDetailRows(ids: string[], categories: CategoryNode[]): Array<[string, string]> {
+  const names = categoryNamesForIds(ids, categories);
+  return ids.map((id, index) => [`Level ${index + 1}`, names[index] || id]);
 }
 
 function BatchDetails({ batch }: { batch: BatchFormState }) {
